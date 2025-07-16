@@ -1,112 +1,99 @@
-// URL base de la API
-const API_URL = "http://localhost:8080/api/articulos";
+const API_URL = 'http://localhost:8080/api/productos';
 
-// Cuando se carga la página, mostramos el listado
-document.addEventListener("DOMContentLoaded", listarArticulos);
+const form = document.getElementById('producto-form');
+const idInput = document.getElementById('producto-id');
+const nombreInput = document.getElementById('nombre');
+const descripcionInput = document.getElementById('descripcion');
+const precioInput = document.getElementById('precio');
+const stockInput = document.getElementById('stock');
+const guardarBtn = document.getElementById('guardar-btn');
+const cancelarBtn = document.getElementById('cancelar-btn');
+const tablaBody = document.querySelector('#productos-table tbody');
 
-// Manejador del formulario
-document.getElementById("form-articulo").addEventListener("submit", guardarArticulo);
+function limpiarFormulario() {
+    idInput.value = '';
+    nombreInput.value = '';
+    descripcionInput.value = '';
+    precioInput.value = '';
+    stockInput.value = '';
+    guardarBtn.textContent = 'Agregar Producto';
+    cancelarBtn.style.display = 'none';
+}
 
-// Botón para cancelar edición
-document.getElementById("cancelar").addEventListener("click", () => {
-    // Limpiar todos los campos del formulario
-    document.getElementById("form-articulo").reset();
-    // Borrar el ID oculto del formulario
-    document.getElementById("idArticulo").value = "";
+function renderProductos(productos) {
+    tablaBody.innerHTML = '';
+    productos.forEach(producto => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${producto.nombre}</td>
+            <td>${producto.descripcion || ''}</td>
+            <td>$${producto.precio.toFixed(2)}</td>
+            <td>${producto.stock}</td>
+            <td>
+                <button onclick="editarProducto(${producto.id})">Editar</button>
+                <button onclick="eliminarProducto(${producto.id})" style="background:#ffb4a2;">Eliminar</button>
+            </td>
+        `;
+        tablaBody.appendChild(tr);
+    });
+}
+
+async function cargarProductos() {
+    const res = await fetch(API_URL);
+    const productos = await res.json();
+    renderProductos(productos);
+}
+
+form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const producto = {
+        nombre: nombreInput.value,
+        descripcion: descripcionInput.value,
+        precio: parseFloat(precioInput.value),
+        stock: parseInt(stockInput.value)
+    };
+    const id = idInput.value;
+    if (id) {
+        // Modificar
+        await fetch(`${API_URL}/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(producto)
+        });
+    } else {
+        // Agregar
+        await fetch(API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(producto)
+        });
+    }
+    limpiarFormulario();
+    cargarProductos();
 });
 
-// === Listar todos los artículos ===
-function listarArticulos() {
-    // Llamada GET a la API para obtener todos los artículos
-    fetch(API_URL)
-        .then(response => response.json()) // Convertimos la respuesta a JSON
-        .then(data => {
-            const tbody = document.getElementById("tabla-articulos"); // Obtenemos el cuerpo de la tabla
-            tbody.innerHTML = ""; // Limpiar tabla antes de insertar nuevos datos
-            data.forEach(articulo => {
-                const fila = document.createElement("tr"); // Creamos una fila de tabla
-                // Insertamos columnas con los datos del artículo y botones de acción
-                fila.innerHTML = `
-                    <td>${articulo.id}</td>
-                    <td>${articulo.nombre}</td>
-                    <td>${articulo.precio.toFixed(2)}</td>
-                    <td>
-                        <button class="btn btn-warning btn-sm" onclick="editarArticulo(${articulo.id})">Editar</button>
-                        <button class="btn btn-danger btn-sm" onclick="eliminarArticulo(${articulo.id})">Eliminar</button>
-                    </td>
-                `;
-                tbody.appendChild(fila); // Agregamos la fila al cuerpo de la tabla
-            });
-        })
-        .catch(error => console.error("Error al listar artículos:", error)); // Manejo de errores
+cancelarBtn.addEventListener('click', () => {
+    limpiarFormulario();
+});
+
+window.editarProducto = async function(id) {
+    const res = await fetch(`${API_URL}/${id}`);
+    const producto = await res.json();
+    idInput.value = producto.id;
+    nombreInput.value = producto.nombre;
+    descripcionInput.value = producto.descripcion;
+    precioInput.value = producto.precio;
+    stockInput.value = producto.stock;
+    guardarBtn.textContent = 'Modificar Producto';
+    cancelarBtn.style.display = 'inline-block';
 }
 
-// === Guardar o actualizar un artículo ===
-function guardarArticulo(event) {
-    event.preventDefault(); // Evitamos el comportamiento por defecto del formulario
-
-    // Obtenemos los valores de los campos del formulario
-    const id = document.getElementById("idArticulo").value;
-    const nombre = document.getElementById("nombre").value.trim();
-    const precio = parseFloat(document.getElementById("precio").value);
-
-    // Validación de campos
-    if (!nombre || isNaN(precio) || precio < 0) {
-        alert("Por favor complete correctamente los campos.");
-        return;
-    }
-
-    // Creamos un objeto artículo con los datos del formulario
-    const articulo = { nombre, precio };
-    // Determinamos si es una edición (PUT) o creación (POST)
-    const url = id ? `${API_URL}/${id}` : API_URL;
-    const metodo = id ? "PUT" : "POST";
-
-    // Enviamos el artículo al backend usando fetch
-    fetch(url, {
-        method: metodo,
-        headers: { "Content-Type": "application/json" }, // Indicamos que el cuerpo es JSON
-        body: JSON.stringify(articulo) // Convertimos el objeto a JSON
-    })
-    .then(response => {
-        if (!response.ok) throw new Error("Error al guardar"); // Verificamos respuesta exitosa
-        return response.json();
-    })
-    .then(() => {
-        // Limpiamos el formulario y recargamos la tabla
-        document.getElementById("form-articulo").reset();
-        document.getElementById("idArticulo").value = "";
-        listarArticulos();
-    })
-    .catch(error => console.error("Error al guardar artículo:", error)); // Manejo de errores
-}
-
-// === Cargar artículo en el formulario para edición ===
-function editarArticulo(id) {
-    // Llamada GET para obtener los datos del artículo por su ID
-    fetch(`${API_URL}/${id}`)
-        .then(response => response.json()) // Convertimos la respuesta a JSON
-        .then(articulo => {
-            // Cargamos los datos del artículo en el formulario
-            document.getElementById("idArticulo").value = articulo.id;
-            document.getElementById("nombre").value = articulo.nombre;
-            document.getElementById("precio").value = articulo.precio;
-        })
-        .catch(error => console.error("Error al obtener artículo:", error)); // Manejo de errores
-}
-
-// === Eliminar un artículo ===
-function eliminarArticulo(id) {
-    // Confirmación antes de eliminar
-    if (confirm("¿Deseás eliminar este artículo?")) {
-        // Llamada DELETE al backend
-        fetch(`${API_URL}/${id}`, {
-            method: "DELETE"
-        })
-        .then(response => {
-            if (!response.ok) throw new Error("Error al eliminar"); // Verificamos que la respuesta sea exitosa
-            listarArticulos(); // Actualizamos la lista de artículos
-        })
-        .catch(error => console.error("Error al eliminar artículo:", error)); // Manejo de errores
+window.eliminarProducto = async function(id) {
+    if (confirm('¿Seguro que deseas eliminar este producto?')) {
+        await fetch(`${API_URL}/${id}`, { method: 'DELETE' });
+        cargarProductos();
     }
 }
+
+// Inicializar
+cargarProductos(); 
